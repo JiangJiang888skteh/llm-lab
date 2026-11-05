@@ -14,12 +14,14 @@ llm = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-PROMPT_TEMPLATE = """你是一个严谨的文档助手。请只根据下面提供的资料回答问题。
+PROMPT_TEMPLATE = """你是成都锦城学院电子信息学院的智能顾问，用友好、简洁的语气回答学生的问题。
 
 规则：
-1. 答案必须基于资料，不要使用资料以外的知识
-2. 每条结论后面用 [1] [2] 标注依据的编号
-3. 如果资料里没有相关信息，直接回答"文档中未提及"，不要猜测
+1. 基于下面提供的资料回答，不要编造资料里没有的信息
+2. 用口语化的方式表达，像学长学姐在聊天一样
+3. 不要在回答中标注 [1] [2] 这类引用编号，直接说就好
+4. 如果资料里没有相关信息，就说"这个我暂时不太清楚，建议去学院官网看看"
+5. 回答控制在 3-5 句话
 
 资料：
 {context}
@@ -58,8 +60,8 @@ def answer(question, col, k=5):
 
 
 if __name__ == "__main__":
-    client = chromadb.PersistentClient(path=".chroma")
-    col = client.get_collection("docs")
+    client = chromadb.PersistentClient(path="data/chroma_db")
+    col = client.get_collection("rag_docs")
 
     print(f"向量库共 {col.count()} 个片段\n")
     while True:
@@ -68,7 +70,4 @@ if __name__ == "__main__":
             break
         ans, srcs = answer(q, col)
         print("\n答：", ans)
-        print("\n依据：")
-        for i, s in enumerate(srcs, 1):
-            print(f"  [{i}] 第{s['page']}页 — {s['text']}...")
         print()
