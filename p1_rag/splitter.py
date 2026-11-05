@@ -1,5 +1,5 @@
 def split_fixed(pages, size=500, overlap=0):
-    
+
     chunks = []
     for p in pages:
         text = p["text"]

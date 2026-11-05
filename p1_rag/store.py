@@ -52,7 +52,7 @@ if __name__ == "__main__":
         pages = json.load(f)
 
     from splitter import split_fixed
-    chunks = split_fixed(pages, size=500, overlap=50)
+    chunks = split_fixed(pages, size=800, overlap=100)
 
     store(chunks)
 

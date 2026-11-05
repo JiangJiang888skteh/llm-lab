@@ -11,17 +11,17 @@ from openai import OpenAI
 load_dotenv()
 
 MORANDI = {
-    "bg": "#F5F0EB",
-    "primary": "#8B9D83",
-    "accent": "#C4A882",
-    "text": "#4A4A4A",
-    "light_text": "#8C8C8C",
-    "bubble_ai": "#EDE8E3",
-    "bubble_user": "#C8D5C0",
-    "border": "#D5CDC5",
+    "bg": "#D5DEE6",
+    "primary": "#4A6B7F",
+    "accent": "#7A9BAD",
+    "text": "#2C3E50",
+    "light_text": "#5A7A8F",
+    "bubble_ai": "#C4D2DC",
+    "bubble_user": "#8FB3C9",
+    "border": "#A3B8C8",
 }
 
-st.set_page_config(page_title="电子信息学院智能顾问", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="华为产业学院顾问", page_icon="🎓", layout="wide")
 
 # 读取头像为 base64
 mascot_file = Path(__file__).parent / "mascot.png"
@@ -113,7 +113,7 @@ PROMPT = """你是成都锦城学院电子信息学院的智能顾问"小锦"，
 llm = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 
 
-def get_answer(question, col, k=5):
+def get_answer(question, col, k=8):
     q_vec = embed([question])[0]
     res = col.query(query_embeddings=[q_vec], n_results=k)
     docs = res["documents"][0]
@@ -172,23 +172,13 @@ with st.sidebar:
     st.markdown("### 🎓 关于小锦")
     st.image(str(mascot_file), width=160)
     st.markdown("""
-    <div style="color: #8C8C8C; font-size: 0.85rem; line-height: 1.6;">
+    <div style="color: #5A7A8F; font-size: 0.85rem; line-height: 1.6;">
     我是<strong>小锦</strong>，电子信息学院的智能顾问～<br>
     戴着眼镜，有点呆萌，但关于学院的问题我都很认真回答哦！<br><br>
     📚 知识库来源：<br>
     华为产业学院概况、多功能中心等学院文档
     </div>
     """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("### 📂 知识文档索引")
-    data_dir = Path(__file__).parent.parent / "data"
-    pdf_files = sorted(data_dir.glob("*.pdf"))
-    for pdf in pdf_files:
-        st.markdown(f'<span class="doc-tag">📄 {pdf.name}</span>', unsafe_allow_html=True)
-
-    count = st.session_state.col.count()
-    st.markdown(f"<br><span class='doc-tag'>共 {count} 个知识片段</span>", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("### 💡 试试问这些")
@@ -208,8 +198,8 @@ with st.sidebar:
 # ── 主区域 ──
 st.markdown("""
 <div class="main-header">
-    <h1>🎓 电子信息学院智能顾问</h1>
-    <p>你好！我是小锦，关于学院的问题随便问～</p>
+    <h1>🎓 电子信息学院华为产业学院顾问</h1>
+    <p>你好！我是小锦，关于华为产业学院的问题随便问～</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -224,19 +214,32 @@ if st.session_state.pending:
     question = st.session_state.pending
     st.session_state.pending = None
 
-    with st.spinner("小锦正在思考..."):
-        answer, sources = get_answer(question, st.session_state.col)
+    # 判断是否在问依据
+    source_keywords = ["依据", "来源", "出处", "哪里看到的", "文档中", "原文"]
+    is_source_query = any(kw in question for kw in source_keywords)
 
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+    if is_source_query:
+        # 找最近一条 AI 回答的来源
+        last_sources = None
+        for msg in reversed(st.session_state.messages):
+            if msg["role"] == "assistant" and msg.get("sources"):
+                last_sources = msg["sources"]
+                break
 
-    with st.expander("📑 查看参考来源", expanded=False):
-        for src in sources:
-            st.markdown(f"""
-            <div class="source-card">
-                <div class="src-title">📄 {src['source']} · 第 {src['page']} 页</div>
-                <div class="src-text">{src['text']}...</div>
-            </div>
-            """, unsafe_allow_html=True)
+        if last_sources:
+            src_text = "\n".join([
+                f"📄 {s['source']}（第{s['page']}页）：{s['text'][:150]}..."
+                for s in last_sources
+            ])
+            reply = f"这个问题的依据来自以下文档片段：\n\n{src_text}"
+        else:
+            reply = "嗯～前面没有找到相关的文档依据，要不你换个问题问问看？"
+
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+    else:
+        with st.spinner("小锦正在思考..."):
+            answer, sources = get_answer(question, st.session_state.col)
+        st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
 
     st.rerun()
 
