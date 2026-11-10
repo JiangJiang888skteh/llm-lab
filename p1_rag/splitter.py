@@ -9,7 +9,8 @@ def split_fixed(pages, size=500, overlap=0):
                 continue
             chunks.append({
                 "text": piece,
-                "page": p["page"]
+                "page": p["page"],
+                "source": p.get("source", "")
             })
     return chunks
 
