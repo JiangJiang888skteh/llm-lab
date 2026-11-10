@@ -103,6 +103,10 @@ PROMPT = """你是成都锦城学院电子信息学院的智能顾问"小锦"，
 4. 如果资料里没有相关信息，就说"这个我暂时不太清楚，建议去学院官网看看哦～"
 5. 回答控制在 3-5 句话
 6. 开头可以偶尔用"嗯～""这个嘛""好问题！"等语气词，显得自然
+7. 结合下面的对话历史理解问题，"他""她""这个"指的是历史里刚聊过的人或事物
+
+对话历史：
+{history}
 
 资料：
 {context}
@@ -110,11 +114,52 @@ PROMPT = """你是成都锦城学院电子信息学院的智能顾问"小锦"，
 问题：{question}
 """
 
+REWRITE_PROMPT = """把用户的最新问题改写成一句不看聊天记录也能看懂的完整问题。
+要求：
+1. 把"他""她""它""这个人""这个老师""那个"等指代词，换成聊天记录里对应的具体名字或事物
+2. 只输出改写后的问题本身，不要解释、不要加引号、不要加问号以外的标点
+3. 如果问题已经完整，就原样输出
+4. 不要改变问题原本要问的内容
+
+对话历史：
+{history}
+
+最新问题：{question}
+"""
+
 llm = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 
 
-def get_answer(question, col, k=8):
-    q_vec = embed([question])[0]
+def history_text(history):
+    if not history:
+        return "（这是第一个问题，没有历史）"
+    lines = []
+    for m in history[-8:]:
+        who = "学生" if m["role"] == "user" else "小锦"
+        lines.append(f"{who}：{m['content']}")
+    return "\n".join(lines)
+
+
+def rewrite_question(question, history):
+    """把追问补全成独立问题，例如把「他是哪个实验室的」补成「范展源老师是哪个实验室的」"""
+    if not history:
+        return question
+    resp = llm.chat.completions.create(
+        model="deepseek-chat",
+        messages=[{"role": "user", "content": REWRITE_PROMPT.format(history=history_text(history), question=question)}],
+        temperature=0,
+        max_tokens=120,
+    )
+    return (resp.choices[0].message.content or "").strip() or question
+
+
+def get_answer(question, col, history=None, k=8):
+    try:
+        standalone = rewrite_question(question, history)
+    except Exception:
+        standalone = question
+
+    q_vec = embed([standalone])[0]
     res = col.query(query_embeddings=[q_vec], n_results=k)
     docs = res["documents"][0]
     metas = res["metadatas"][0]
@@ -124,7 +169,7 @@ def get_answer(question, col, k=8):
         blocks.append(f"[{i}] (第{meta.get('page', 0)}页 | {meta.get('source', '')})\n{doc}")
     context = "\n\n".join(blocks)
 
-    prompt = PROMPT.format(context=context, question=question)
+    prompt = PROMPT.format(context=context, question=question, history=history_text(history))
     resp = llm.chat.completions.create(
         model="deepseek-chat",
         messages=[{"role": "user", "content": prompt}],
@@ -237,8 +282,9 @@ if st.session_state.pending:
 
         st.session_state.messages.append({"role": "assistant", "content": reply})
     else:
+        history = st.session_state.messages[:-1]
         with st.spinner("小锦正在思考..."):
-            answer, sources = get_answer(question, st.session_state.col)
+            answer, sources = get_answer(question, st.session_state.col, history=history)
         st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
 
     st.rerun()
